@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Read the Form</title>
+<style>
+:root{--bg:#faf7f2;--ink:#1a1a18;--mut:#6b6660;--line:#ddd6cb;--card:#fff;
+      --code:#8a4b2a;--eng:#1f5c3d;--warn:#8a2a2a;--accent:#1f4f7a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+     font:16px/1.55 ui-serif,Georgia,"Times New Roman",serif}
+.wrap{max-width:1080px;margin:0 auto;padding:34px 20px 90px}
+h1{font-size:34px;line-height:1.15;margin:0 0 6px;letter-spacing:-.01em}
+.sub{color:var(--mut);margin:0 0 26px;font-size:17px}
+.rule{height:1px;background:var(--line);margin:26px 0}
+.drop{border:2px dashed var(--line);background:var(--card);border-radius:12px;
+      padding:26px;text-align:center;transition:.15s}
+.drop.hot{border-color:var(--accent);background:#f2f7fb}
+button{font:inherit;font-size:15px;padding:9px 16px;border-radius:8px;cursor:pointer;
+       border:1px solid var(--line);background:var(--card);color:var(--ink)}
+button.primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+button:disabled{opacity:.5;cursor:default}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:22px}
+@media(max-width:760px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px}
+.card h2{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--mut);
+         margin:0 0 14px;font-weight:600;font-family:ui-sans-serif,system-ui}
+table{width:100%;border-collapse:collapse}
+td{padding:7px 0;border-bottom:1px solid #f0ebe3;vertical-align:top;font-size:15px}
+tr:last-child td{border-bottom:0}
+td.f{color:var(--mut);width:47%;font-size:14px;padding-right:12px}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px}
+.code{color:var(--code);font-weight:600}
+.eng{color:var(--eng)}
+.none{color:#b3aca2;font-style:italic}
+.unres{color:var(--warn)}
+.note{font-size:13px;color:var(--mut);margin-top:4px;line-height:1.45}
+.banner{background:#fff8ec;border:1px solid #e8d7b4;border-radius:10px;padding:13px 16px;
+        font-size:14.5px;margin-top:20px}
+.err{background:#fdf2f2;border-color:#e8bcbc;color:var(--warn)}
+img.form{width:100%;border:1px solid var(--line);border-radius:8px;display:block}
+.spin{display:inline-block;width:13px;height:13px;border:2px solid var(--line);
+      border-top-color:var(--ink);border-radius:50%;animation:s .7s linear infinite;
+      vertical-align:-2px;margin-right:7px}
+@keyframes s{to{transform:rotate(360deg)}}
+.rows td{font-size:14px}
+.foot{margin-top:34px;font-size:13.5px;color:var(--mut);line-height:1.6}
+code{background:#f2ede4;padding:1px 5px;border-radius:4px;font-size:13px}
+</style></head><body><div class="wrap">
+
+<h1>Read the form</h1>
+<p class="sub">Photograph an FAA Service Difficulty Report. Get back what it actually says,
+and every other aircraft it has happened to.</p>
+
+<div class="drop" id="drop">
+  <p style="margin:0 0 14px">Drop a photo or scan of a report here.</p>
+  <button class="primary" id="pick">Choose an image</button>
+  <button id="demo">Use the example form</button>
+  <input type="file" id="file" accept="image/*" hidden>
+</div>
+
+<div id="out"></div>
+
+<div class="foot">
+  <div class="rule"></div>
+  <p><strong>How this works, and what it refuses to do.</strong>
+  GLM-5.3-Flash is given one job: read the characters in each box. It is never asked
+  what a code means. Meaning comes from the FAA's own published lookup tables.</p>
+  <p>That split is the point. Asked to interpret, a model will produce a plausible
+  expansion for a code it has never seen, and it will not tell you it guessed.
+  Anything the FAA's tables do not cover stays on screen as the raw code, in red.</p>
+  <p>Codes and comparison reports come from
+  <a href="https://aircraftdefects.com">aircraftdefects.com</a>,
+  which holds every Service Difficulty Report the FAA has published since 1995.</p>
+</div>
+</div>
+<script>
+const $=s=>document.querySelector(s), out=$("out");
+const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const num=n=>n==null?"":Number(n).toLocaleString("en");
+
+function busy(msg){ out.innerHTML=`<div class="banner"><span class="spin"></span>${esc(msg)}</div>`; }
+function fail(msg){ out.innerHTML=`<div class="banner err"><strong>Stopped.</strong> ${esc(msg)}</div>`; }
+
+$("pick").onclick=()=>$("file").click();
+$("file").onchange=e=>{ if(e.target.files[0]) send(e.target.files[0]); };
+$("demo").onclick=async()=>{
+  busy("loading the example form");
+  const b=await (await fetch("static/demo-form.jpeg")).blob();
+  send(new File([b],"demo-form.jpeg",{type:"image/jpeg"}), "static/demo-form.jpeg");
+};
+const drop=$("drop");
+["dragenter","dragover"].forEach(k=>drop.addEventListener(k,e=>{e.preventDefault();drop.classList.add("hot")}));
+["dragleave","drop"].forEach(k=>drop.addEventListener(k,e=>{e.preventDefault();drop.classList.remove("hot")}));
+drop.addEventListener("drop",e=>{ const f=e.dataTransfer.files[0]; if(f) send(f); });
+
+async function send(file, previewUrl){
+  busy("GLM-5.3-Flash is reading the boxes");
+  const url = previewUrl || URL.createObjectURL(file);
+  const fd=new FormData(); fd.append("image",file);
+  let d;
+  try{ const r=await fetch("api/read",{method:"POST",body:fd}); d=await r.json();
+       if(d.error) return fail(d.error); }
+  catch(e){ return fail(String(e)); }
+  render(d,url);
+  similar(d);
+}
+
+function render(d,url){
+  const filed=d.fields.map(f=>`<tr><td class="f">(${f.letter}) ${esc(f.field)}</td>
+    <td class="mono ${f.code?"code":"none"}">${f.code?esc(f.code):"blank"}</td></tr>`).join("");
+  const eng=d.fields.map(f=>{
+    if(!f.code) return `<tr><td class="f">${esc(f.field)}</td><td class="none">not filed</td></tr>`;
+    if(!f.decodable) return `<tr><td class="f">${esc(f.field)}</td><td>${esc(f.code)}</td></tr>`;
+    if(!f.meaning) return `<tr><td class="f">${esc(f.field)}</td>
+      <td class="unres mono">${esc(f.code)}<div class="note">Not in the FAA's tables. Left as filed.</div></td></tr>`;
+    return `<tr><td class="f">${esc(f.field)}</td><td class="eng">${esc(f.meaning.label)}
+      ${f.meaning.note?`<div class="note">${esc(f.meaning.note)}</div>`:""}</td></tr>`;
+  }).join("");
+
+  out.innerHTML=`
+  <div class="grid">
+    <div class="card"><h2>As filed</h2><table>${filed}</table>
+      <img class="form" src="${esc(url)}" alt="the report" style="margin-top:16px"></div>
+    <div class="card"><h2>What it says</h2><table>${eng}</table></div>
+  </div>
+  ${d.free_text?`<div class="card" style="margin-top:18px"><h2>The mechanic's own words</h2>
+     <p class="mono" style="margin:0">${esc(d.free_text)}</p></div>`:""}
+  ${d.unresolved.length?`<div class="banner"><strong>${d.unresolved.length}
+     code${d.unresolved.length>1?"s":""} the FAA does not define.</strong>
+     ${d.unresolved.map(u=>`${esc(u.field)} <code>${esc(u.code)}</code>`).join(", ")}.
+     Shown as filed rather than guessed at.</div>`:""}
+  <div id="sim"></div>`;
+}
+
+async function similar(d){
+  const get=k=>(d.fields.find(f=>f.key===k)||{}).code;
+  const body={jasc_ata_code:get("jasc_ata_code"),operator_designator:get("operator_designator"),
+              nature_of_condition:get("nature_of_condition")};
+  if(!body.jasc_ata_code&&!body.operator_designator&&!body.nature_of_condition) return;
+  $("sim").innerHTML=`<div class="banner"><span class="spin"></span>asking the file what else looks like this</div>`;
+  let r;
+  try{ r=await (await fetch("api/similar",{method:"POST",headers:{"Content-Type":"application/json"},
+       body:JSON.stringify(body)})).json(); }
+  catch(e){ $("sim").innerHTML=""; return; }
+  const res=r.result||{}, rows=(res.rows||[]).slice(0,8);
+  if(!rows.length){ $("sim").innerHTML=`<div class="banner">Nothing else in the file matches this combination.</div>`; return; }
+  $("sim").innerHTML=`<div class="card" style="margin-top:18px">
+    <h2>What else looks like this</h2>
+    <p style="margin:0 0 12px">${num(res.total)} reports in the file match this system and condition.
+    Here are eight.</p>
+    <table class="rows">${rows.map(x=>`<tr>
+      <td class="mono" style="width:100px">${esc(x.DifficultyDate||"")}</td>
+      <td style="width:150px">${esc((x.AircraftMake||"")+" "+(x.AircraftModel||""))}</td>
+      <td>${esc((x.Discrepancy||"").slice(0,150))}</td></tr>`).join("")}</table>
+    <p class="note" style="margin-top:12px">A count is not a safety ranking. A big airline files more
+    reports because it flies more aircraft.</p></div>`;
+}
+</script></body></html>
