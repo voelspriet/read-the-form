@@ -16,8 +16,23 @@ import base64, json, os, re, io
 import requests
 from flask import Flask, jsonify, request, send_from_directory
 
-ZAI_URL = "https://api.z.ai/api/paas/v4/chat/completions"
-MODEL = "glm-5.3-flash"
+# GLM-5.3 is text only. GLM-5.3-Flash is the multimodal one in the family, and
+# this whole tool is an image going in, so the -flash suffix is not a cost choice
+# here, it is the only model in the series that can do the job at all.
+MODEL = os.environ.get("ZAI_MODEL", "glm-5.3-flash")
+
+# Two base URLs exist. Ordinary pay-as-you-go keys use the first. Keys attached to
+# a GLM Coding Plan, including an expired one, are routed to the second: Z.ai
+# state that such accounts reach the model API through the OpenAI-compatible
+# protocol only. ZAI_BASE lets one key try the other without a code change.
+ZAI_BASE = os.environ.get("ZAI_BASE", "https://api.z.ai/api/paas/v4")
+ZAI_URL = ZAI_BASE.rstrip("/") + "/chat/completions"
+
+# Reasoning cannot be turned off on this family and defaults to max. Max on a
+# transcription task buys nothing and is billed for: the job is to read ten boxes,
+# not to think about them. Start low, and keep it switchable so the difference can
+# be measured rather than assumed.
+EFFORT = os.environ.get("ZAI_EFFORT", "low")
 SDR = "https://aircraftdefects.com"          # the corpus and the FAA code tables
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -91,6 +106,8 @@ def read_form(image_b64, mime):
     body = {
         "model": MODEL,
         "temperature": 0,
+        "thinking": {"type": "enabled", "clear_thinking": False},
+        "reasoning_effort": EFFORT,
         "messages": [{"role": "user", "content": [
             {"type": "text", "text": READ_PROMPT},
             {"type": "image_url",
@@ -159,7 +176,7 @@ def api_similar():
 def health():
     k = (os.environ.get("ZAI_API_KEY") or "").strip()
     real = bool(k) and "paste" not in k.lower()
-    return jsonify(model=MODEL, key_set=real,
+    return jsonify(model=MODEL, base=ZAI_BASE, effort=EFFORT, key_set=real,
                    key_hint=("placeholder still in .env" if k and not real else
                              ("set" if real else "missing")),
                    tables=sorted(tables().keys()))

@@ -29,6 +29,15 @@ echo "   POST /api/anthropic/v1/messages -> HTTP $code"
                     || echo "   $(head -c 220 /tmp/z2.json)"
 
 echo
+echo "2b. Coding Plan endpoint  (dedicated URL for GLM Coding Plan keys)"
+code=$(curl -s -o /tmp/z2b.json -w '%{http_code}' --max-time 60 \
+  -X POST "https://api.z.ai/api/coding/paas/v4/chat/completions" \
+  -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+  -d '{"model":"glm-5.3-flash","messages":[{"role":"user","content":"reply with the single word: ok"}],"max_tokens":8}')
+echo "   POST /api/coding/paas/v4/chat/completions -> HTTP $code"
+[ "$code" = "200" ] || echo "   $(head -c 200 /tmp/z2b.json)"
+
+echo
 echo "3. Vision  (the whole point of the tool)"
 code=$(curl -s -o /tmp/z3.json -w '%{http_code}' --max-time 90 \
   -X POST "https://api.z.ai/api/paas/v4/chat/completions" \
@@ -39,6 +48,8 @@ echo "   image input -> HTTP $code"
                     || echo "   $(head -c 220 /tmp/z3.json)"
 echo
 echo "Read it like this:"
-echo "  1 works, 2 fails  ->  pay-as-you-go is enough for the tool; add a Coding Plan for Claude Code"
-echo "  1 and 2 both work ->  no Coding Plan needed at all"
-echo "  1 fails           ->  no credit on the account yet"
+echo "  1 works, 2 fails   ->  pay-as-you-go covers the tool; add a Coding Plan for Claude Code"
+echo "  1 and 2 both work  ->  no Coding Plan needed at all"
+echo "  1 fails, 2b works  ->  Coding Plan key: set ZAI_BASE=https://api.z.ai/api/coding/paas/v4"
+echo "  1 fails            ->  no credit on the account yet"
+echo "  3 fails            ->  stop. Vision is the product. Nothing else matters."
