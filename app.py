@@ -179,7 +179,7 @@ def con():
 FILTER_ARGS = {"q", "operator", "make", "model", "tail", "part", "condition",
                "stage", "discovered", "nature", "crew", "enginemake", "enginemodel",
                "partmake", "zone", "jasc", "corrosion", "cracked", "minhours",
-               "ata", "from", "to"}
+               "ata", "from", "to", "lagmin", "lagmax"}
 VIEW_ARGS = {"view", "hero", "case", "aircraft", "ca", "cb", "cf",
              "limit", "offset", "a", "b", "by", "days", "field", "kind", "min", "v"}
 KNOWN_ARGS = FILTER_ARGS | VIEW_ARGS
@@ -321,6 +321,17 @@ def _filters(args):
         if ok:
             where.append("difficulty_dt %s ?" % op)
             params.append(v)
+        else:
+            rejected[field] = v
+    # hand-written, 31 August 2026: the paperwork gap as a filter, so the bars on
+    # the lag view open the reports they count. Days between difficulty and filing.
+    for field, op in (("lagmin", ">="), ("lagmax", "<=")):
+        v = (args.get(field) or "").strip()
+        if not v:
+            continue
+        if re.match(r"^-?\d{1,5}$", v):
+            where.append("datediff('day', difficulty_dt, TRY_CAST(SubmissionDate AS DATE)) %s ?" % op)
+            params.append(int(v))
         else:
             rejected[field] = v
     if rejected:
@@ -1586,6 +1597,14 @@ def _selection_title(args):
         except Exception:
             return d
 
+    lmin, lmax = (args.get("lagmin") or "").strip(), (args.get("lagmax") or "").strip()
+    if lmin and lmax:
+        bits.append("filed the same day" if lmin == lmax == "0"
+                    else "filed %s to %s days after the difficulty" % (lmin, lmax))
+    elif lmin:
+        bits.append("filed %s days or more after the difficulty" % lmin)
+    elif lmax:
+        bits.append("filed within %s days" % lmax)
     f, t = (args.get("from") or "").strip(), (args.get("to") or "").strip()
     if f and t:
         # one month exactly, named as a month rather than as two dates
